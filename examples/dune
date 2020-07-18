@@ -1,0 +1,3 @@
+(executables
+  (names distilbert)
+  (libraries base bert_model bert_tokenize torch stdio))
