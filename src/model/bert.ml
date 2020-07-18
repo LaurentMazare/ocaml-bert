@@ -229,13 +229,15 @@ let model vs (config : Config.t) =
       | _ -> None
     in
     let embedding_output = Layer.forward_ embeddings input_ids ~is_training in
-    encoder
-      ~hidden_states:embedding_output
-      ~mask:(Some mask)
-      ~encoder_hidden_states
-      ~encoder_mask
-      ~is_training
-    |> Layer.forward pooler
+    let hidden_states =
+      encoder
+        ~hidden_states:embedding_output
+        ~mask:(Some mask)
+        ~encoder_hidden_states
+        ~encoder_mask
+        ~is_training
+    in
+    hidden_states, Layer.forward pooler hidden_states
 
 let prediction_head_transform vs (config : Config.t) =
   let dense =
@@ -266,4 +268,5 @@ let masked_lm vs (config : Config.t) =
   let lm_prediction_head = lm_prediction_head Var_store.(vs / "cls") config in
   fun ~input_ids ~mask ~encoder_hidden_states ~encoder_mask ~is_training ->
     model ~input_ids ~mask ~encoder_hidden_states ~encoder_mask ~is_training
+    |> fst
     |> Layer.forward lm_prediction_head
