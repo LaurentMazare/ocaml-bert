@@ -1,4 +1,5 @@
 open Torch
+module Config = Distilbert_config
 
 module With_mask : sig
   val model

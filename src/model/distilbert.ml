@@ -3,10 +3,7 @@
 *)
 open Base
 open Torch
-
-let gelu xs =
-  let erf = Tensor.erf (Tensor.div1 xs (Scalar.f (Float.sqrt 2.))) in
-  Tensor.mul1 (Tensor.add1 erf (Scalar.f 1.)) (Scalar.f 0.5) |> Tensor.mul xs
+module Config = Distilbert_config
 
 module Attention = struct
   let multihead vs (config : Config.t) =
@@ -82,18 +79,6 @@ let sinusoidal_position_embeddings ~device ~dim ~max_len =
         ~sparse:false
         ~scale_grad_by_freq:false)
 
-let layer_norm vs dim =
-  let weight = Var_store.new_var vs ~name:"weight" ~shape:[ dim ] ~init:Ones in
-  let bias = Var_store.new_var vs ~name:"bias" ~shape:[ dim ] ~init:Zeros in
-  Layer.of_fn (fun xs ->
-      Tensor.layer_norm
-        xs
-        ~normalized_shape:[ dim ]
-        ~weight:(Some weight)
-        ~bias:(Some bias)
-        ~eps:1e-12
-        ~cudnn_enable:false)
-
 let embeddings vs (config : Config.t) =
   let word_e =
     Layer.embeddings
@@ -114,7 +99,7 @@ let embeddings vs (config : Config.t) =
         ~num_embeddings:config.max_position_embeddings
         ~embedding_dim:config.dim
   in
-  let layer_norm_ = layer_norm Var_store.(vs / "LayerNorm") config.dim in
+  let layer_norm_ = Layer.layer_norm Var_store.(vs / "LayerNorm") config.dim ~eps:1e-12 in
   Layer.of_fn_
     Tensor.(
       fun xs ~is_training ->
@@ -136,8 +121,8 @@ let feed_forward vs (config : Config.t) =
   in
   let activation =
     match config.activation with
-    | `relu -> Tensor.relu
-    | `gelu -> gelu
+    | `relu -> Activation.relu
+    | `gelu -> Activation.gelu
   in
   Layer.of_fn_ (fun xs ~is_training ->
       Layer.forward lin1 xs
@@ -147,8 +132,12 @@ let feed_forward vs (config : Config.t) =
 
 let transformer_block vs (config : Config.t) =
   let attention = Attention.multihead Var_store.(vs / "attention") config in
-  let sa_layer_norm = layer_norm Var_store.(vs / "sa_layer_norm") config.dim in
-  let output_layer_norm = layer_norm Var_store.(vs / "output_layer_norm") config.dim in
+  let sa_layer_norm =
+    Layer.layer_norm Var_store.(vs / "sa_layer_norm") config.dim ~eps:1e-12
+  in
+  let output_layer_norm =
+    Layer.layer_norm Var_store.(vs / "output_layer_norm") config.dim ~eps:1e-12
+  in
   let ffn = feed_forward Var_store.(vs / "ffn") config in
   fun xs ~mask ~is_training ->
     let output, sa_weights = attention ~query:xs ~key:xs ~value:xs ~mask ~is_training in
@@ -196,7 +185,7 @@ module With_mask = struct
       model xs ~mask ~is_training
       |> fst
       |> Layer.forward vocab_transform
-      |> gelu
+      |> Activation.gelu
       |> Layer.forward vocab_layer_norm
       |> Layer.forward vocab_projector
 

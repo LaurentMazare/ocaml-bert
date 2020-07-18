@@ -14,6 +14,7 @@
 *)
 open! Base
 open! Torch
+module Model = Bert_model.Distilbert
 module Token = Bert_tokenize.Token
 module Tokenizer = Bert_tokenize.Bert_tokenizer
 module Vocab = Bert_tokenize.Bert_vocab
@@ -23,7 +24,7 @@ let () =
   if Array.length Sys.argv <> 3
   then Printf.failwithf "usage: %s weights.ot vocab.txt" Sys.argv.(0) ();
   let vs = Var_store.create ~name:"db" ~device:Cpu () in
-  let model = Bert_model.Model.masked_lm vs Bert_model.Config.base in
+  let model = Model.masked_lm vs Model.Config.base in
   Stdio.printf "Loading weights from %s\n%!" Sys.argv.(1);
   Serialize.load_multi_ ~named_tensors:(Var_store.all_vars vs) ~filename:Sys.argv.(1);
   Stdio.printf "Loading vocab from %s\n%!" Sys.argv.(2);
