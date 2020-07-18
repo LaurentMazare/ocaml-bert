@@ -62,5 +62,6 @@ let () =
       output_token
   in
   predict_masked "Looks like one thing is missing" ~masked_index:4;
+  predict_masked "It was a very nice and sunny day" ~masked_index:7;
   predict_masked "It's like comparing oranges to apples" ~masked_index:6;
   predict_masked "X is the best programming language" ~masked_index:1

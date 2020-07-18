@@ -21,7 +21,9 @@ let embeddings vs (config : Config.t) =
       ~num_embeddings:config.vocab_size
       ~embedding_dim:config.hidden_size
   in
-  let layer_norm = Layer.layer_norm Var_store.(vs / "LayerNorm") config.hidden_size in
+  let layer_norm =
+    Layer.layer_norm Var_store.(vs / "LayerNorm") config.hidden_size ~eps:1e-12
+  in
   Layer.of_fn_ (fun xs ~is_training ->
       let seq_len = Tensor.shape xs |> List.last_exn in
       let pos_ids =
