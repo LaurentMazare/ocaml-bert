@@ -13,3 +13,5 @@ type t =
   ; hidden_act : [ `gelu | `relu | `mish ]
   }
 [@@deriving sexp]
+
+val base : t

@@ -87,6 +87,11 @@ let output vs (config : Config.t) ~input_dim =
     |> Tensor.add input_tensor
     |> Layer.forward layer_norm
 
+let activation = function
+  | `gelu -> Activation.gelu
+  | `relu -> Activation.relu
+  | `mish -> Activation.mish
+
 let bert_intermediate vs (config : Config.t) =
   let dense =
     Layer.linear
@@ -94,12 +99,7 @@ let bert_intermediate vs (config : Config.t) =
       ~input_dim:config.hidden_size
       config.intermediate_size
   in
-  Layer.of_fn (fun xs ->
-      let xs = Layer.forward dense xs in
-      match config.hidden_act with
-      | `gelu -> Activation.gelu xs
-      | `relu -> Activation.relu xs
-      | `mish -> Activation.mish xs)
+  Layer.of_fn (fun xs -> Layer.forward dense xs |> activation config.hidden_act)
 
 let self_output vs config = output vs config ~input_dim:config.Config.hidden_size
 let bert_output vs config = output vs config ~input_dim:config.Config.intermediate_size
@@ -160,6 +160,7 @@ let bert_layer vs (config : Config.t) =
     bert_output output attention_output ~is_training
 
 let bert_encoder vs (config : Config.t) =
+  let vs = Var_store.(vs / "layer") in
   let layers =
     List.init config.num_hidden_layers ~f:(fun i ->
         bert_layer Var_store.(vs / Int.to_string i) config)
@@ -171,7 +172,7 @@ let bert_encoder vs (config : Config.t) =
 let model vs (config : Config.t) =
   let embeddings = embeddings Var_store.(vs / "embeddings") config in
   let encoder = bert_encoder Var_store.(vs / "encoder") config in
-  let pooler = bert_pooler Var_store.(vs / "encoder") config in
+  let pooler = bert_pooler Var_store.(vs / "pooler") config in
   fun ~input_ids ~mask ~encoder_hidden_states ~encoder_mask ~is_training ->
     let input_shape = Tensor.size input_ids in
     let batch_size, seq_len =
@@ -235,3 +236,34 @@ let model vs (config : Config.t) =
       ~encoder_mask
       ~is_training
     |> Layer.forward pooler
+
+let prediction_head_transform vs (config : Config.t) =
+  let dense =
+    Layer.linear Var_store.(vs / "dense") ~input_dim:config.hidden_size config.hidden_size
+  in
+  let layer_norm =
+    Layer.layer_norm Var_store.(vs / "LayerNorm") config.hidden_size ~eps:1e-12
+  in
+  Layer.of_fn (fun xs ->
+      Layer.forward dense xs |> activation config.hidden_act |> Layer.forward layer_norm)
+
+let lm_prediction_head vs (config : Config.t) =
+  let vs = Var_store.(vs / "predictions") in
+  let transform = prediction_head_transform Var_store.(vs / "transform") config in
+  let decoder =
+    Layer.linear
+      Var_store.(vs / "decoder")
+      ~input_dim:config.hidden_size
+      config.vocab_size
+      ~use_bias:false
+  in
+  let bias = Var_store.new_var vs ~name:"bias" ~shape:[ config.vocab_size ] ~init:Zeros in
+  Layer.of_fn (fun xs ->
+      Layer.forward transform xs |> Layer.forward decoder |> fun xs -> Tensor.(xs + bias))
+
+let masked_lm vs (config : Config.t) =
+  let model = model Var_store.(vs / "bert") config in
+  let lm_prediction_head = lm_prediction_head Var_store.(vs / "cls") config in
+  fun ~input_ids ~mask ~encoder_hidden_states ~encoder_mask ~is_training ->
+    model ~input_ids ~mask ~encoder_hidden_states ~encoder_mask ~is_training
+    |> Layer.forward lm_prediction_head

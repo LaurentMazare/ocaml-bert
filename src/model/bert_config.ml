@@ -13,3 +13,16 @@ type t =
   ; hidden_act : [ `gelu | `relu | `mish ]
   }
 [@@deriving sexp]
+
+let base =
+  { vocab_size = 30522
+  ; hidden_size = 768
+  ; intermediate_size = 3072
+  ; num_hidden_layers = 12
+  ; max_position_embeddings = 512
+  ; hidden_dropout_p = 0.1
+  ; attention_dropout_p = 0.1
+  ; num_attention_heads = 12
+  ; is_decoder = false
+  ; hidden_act = `gelu
+  }
