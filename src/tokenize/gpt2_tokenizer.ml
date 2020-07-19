@@ -7,13 +7,15 @@ type t =
   ; lower_case : bool
   }
 
-let pattern_re =
-  {|'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+|}
+let pattern_re = {|'s|'t|'re|'ve|'m|'ll|'d| ?[a-zA-Z]+| ?\d+| ?[^\s\[a-zA-Z]\d]+|\s+|}
 
 let create vocab ~lower_case =
-  let pattern_re = Re.Perl.re pattern_re |> Re.compile in
+  let pattern_re = Re.Perl.re pattern_re in
+  let pattern_re = Re.compile pattern_re in
   { vocab; pattern_re; lower_case }
 
 let tokenize t str =
   Re.matches t.pattern_re str
-  |> List.concat_map ~f:(fun str -> String.lowercase str |> Gpt2_vocab.bpe t.vocab)
+  |> List.concat_map ~f:(fun str ->
+         let str = if t.lower_case then String.lowercase str else str in
+         Gpt2_vocab.bpe t.vocab str)

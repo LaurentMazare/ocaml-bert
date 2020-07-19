@@ -6,3 +6,4 @@ let gelu xs =
 
 let relu = Tensor.relu
 let mish xs = Tensor.(xs * tanh (softplus xs))
+let swish xs = Tensor.(xs * sigmoid xs)
