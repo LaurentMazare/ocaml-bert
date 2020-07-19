@@ -92,6 +92,19 @@ let unicode_chars str =
   in
   loop [] ~prev_start:0
 
+let bytes_encoding str =
+  let buf = Buffer.create 128 in
+  String.iter str ~f:(fun chr ->
+      let c = Char.to_int chr in
+      if c <= 32
+      then Uutf.Buffer.add_utf_8 buf (Uchar.of_scalar_exn (c + 256))
+      else if 127 <= c && c <= 160
+      then Uutf.Buffer.add_utf_8 buf (Uchar.of_scalar_exn (c + 162))
+      else if c = 173
+      then Uutf.Buffer.add_utf_8 buf (Uchar.of_scalar_exn 323)
+      else Buffer.add_char buf chr);
+  Buffer.contents buf |> unicode_chars
+
 let bpe_rank t pair = Map.find t.bpe_ranks pair
 
 (* byte-level Byte-Pair-Encoding *)
@@ -125,7 +138,7 @@ let bpe_ t str =
       in
       group words [] |> loop
   in
-  loop (unicode_chars str)
+  loop (bytes_encoding str)
 
 let bpe t str =
   Hashtbl.find_or_add t.cache str ~default:(fun () ->
@@ -139,11 +152,14 @@ let%expect_test "bpe" =
       |> List.map ~f:(Printf.sprintf "\"%s\"")
       |> String.concat ~sep:","
       |> Stdio.printf "\"%s\": %s\n%!" str)
-    [ "foobar"; "fobar"; "foo"; "fo"; "o" ];
+    [ "bafoor"; "foobar"; "fobar"; "foo"; "fo"; "o"; " foo bar"; "fo ofoo " ];
   [%expect
     {|
+    "bafoor": "b","a","foo","r"
     "foobar": "foo","b","a","r"
     "fobar": "fo","b","a","r"
     "foo": "foo"
     "fo": "fo"
-    "o": "o" |}]
+    "o": "o"
+    " foo bar": "Ġ","foo","Ġ","b","a","r"
+    "fo ofoo ": "fo","Ġ","o","foo","Ġ" |}]
