@@ -45,21 +45,28 @@ let () =
   let tokenizer = Tokenizer.create vocab ~lower_case:true in
   Stdio.printf "Done loading\n%!";
   let token_ids =
-    Tokenizer.tokenize tokenizer "One two three four five six seven eight nine ten eleven"
-    |> Array.of_list
+    Tokenizer.tokenize tokenizer "The best way to go there is" |> Array.of_list
   in
-  let token_ids = Tensor.of_int2 [| token_ids |] in
-  let output, _ =
-    model
-      token_ids
-      ~layer_past:None
-      ~attention_mask:None
-      ~token_type_ids:None
-      ~position_ids:None
-      ~is_training:false
+  let rec loop n ~token_ids ~layer_past =
+    if n <> 0
+    then (
+      let token_ids = Tensor.of_int2 [| token_ids |] in
+      let output, layer_past =
+        model
+          token_ids
+          ~layer_past
+          ~attention_mask:None
+          ~token_type_ids:None
+          ~position_ids:None
+          ~is_training:false
+      in
+      let next_token_id =
+        (* TODO: rather than taking the argmax, add a notion of temperature and
+           randomly sample the next word based on the probability distribution. *)
+        Tensor.get (Tensor.get output 0) (-1) |> Tensor.argmax |> Tensor.to_int0_exn
+      in
+      Stdio.printf "Next token id: %d\n%!" next_token_id;
+      Stdio.printf "Next token: %s\n%!" (Vocab.token vocab next_token_id);
+      loop (n - 1) ~token_ids:[| next_token_id |] ~layer_past:(Some layer_past))
   in
-  let next_token_id =
-    Tensor.get (Tensor.get output 0) (-1) |> Tensor.argmax |> Tensor.to_int0_exn
-  in
-  Stdio.printf "Next token id: %d\n%!" next_token_id;
-  Stdio.printf "Next token: %s\n%!" (Vocab.token vocab next_token_id)
+  loop 10 ~token_ids ~layer_past:None
