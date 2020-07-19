@@ -71,6 +71,7 @@ module Attention = struct
       |> Tensor.permute ~dims
     in
     fun xs ~layer_past ~attention_mask ~is_training ->
+      let batch_size = Tensor.size xs |> List.hd_exn in
       let query, key, value =
         match Layer.forward c_attn xs |> Tensor.split ~split_size:n_embd ~dim:2 with
         | query :: key :: value :: _ ->
@@ -94,7 +95,9 @@ module Attention = struct
       in
       let a =
         attention ~query ~key ~value ~attention_mask ~is_training
-        |> Tensor.flatten
+        |> Tensor.transpose ~dim0:1 ~dim1:2
+        |> Tensor.contiguous
+        |> Tensor.view ~size:[ batch_size; -1; n_head * dim_per_head ]
         |> Layer.forward c_proj
         |> Tensor.dropout ~p:resid_p ~is_training
       in
@@ -132,6 +135,7 @@ let block vs config ~scale =
     Tensor.(xs + m), present
 
 let model vs config =
+  let vs = Var_store.(vs / "transformer") in
   let { Config.vocab_size; n_layer; n_positions; n_embd; layer_norm_eps; embd_p; _ } =
     config
   in

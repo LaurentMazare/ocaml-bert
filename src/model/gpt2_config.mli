@@ -14,3 +14,5 @@ type t =
   ; layer_norm_eps : float
   }
 [@@deriving sexp]
+
+val distilgpt2 : t
