@@ -21,12 +21,14 @@ depends: [
   "ppx_sexp_conv" {>= "v0.14"}
   "sexplib" {>= "v0.14"}
   "stdio" {>= "v0.14"}
+  "re" {>= "1.9.0"}
+  "yojson" {>= "1.7.0"}
 ]
 
 available: os = "linux" | os = "macos"
 
-synopsis: "Bert-like models for OCaml"
+synopsis: "BERT-like models for OCaml"
 description: """
-Provide various Bert like models for NLP tasks. These relies on ocaml-torch
-so that models can be run on GPUs.
+Provide various Natural Language Processing models based on transformers archictecture.
+These relies on ocaml-torch so that models can be run on GPUs.
 """

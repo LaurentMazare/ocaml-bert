@@ -11,12 +11,8 @@ type t =
 
 let create ~tokens =
   let token_indices =
-    List.foldi
-      tokens
-      ~init:(Map.empty (module String))
-      ~f:(fun idx acc token ->
-        let token = String.strip token in
-        Map.set acc ~key:token ~data:idx)
+    List.mapi tokens ~f:(fun idx token -> String.strip token, idx)
+    |> Map.of_alist_exn (module String)
   in
   { tokens = Array.of_list tokens
   ; token_indices

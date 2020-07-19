@@ -2,5 +2,5 @@
   (name bert_tokenize)
   (public_name bert.tokenize)
   (inline_tests)
-  (libraries base stdio uutf)
+  (libraries base re stdio uutf yojson)
   (preprocess (pps ppx_expect ppx_sexp_conv)))

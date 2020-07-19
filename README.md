@@ -12,3 +12,8 @@ The models implemented so far are:
   pre-trained weights are available under the Apache 2.0 license from Huggingface.
   [weights file](https://cdn.huggingface.co/distilbert-base-uncased-rust_model.ot),
   [vocabulary file](https://cdn.huggingface.co/bert-base-uncased-vocab.txt).
+
+- BERT:
+  pre-trained weights are available under the Apache 2.0 license from Google and hosted by Huggingface.
+  [weights file](https://cdn.huggingface.co/bert-base-uncased-rust_model.ot),
+  [vocabulary file](https://cdn.huggingface.co/bert-base-uncased-vocab.txt).
