@@ -104,3 +104,82 @@ let self_attention vs (config : Config.t) =
       |> Layer.forward layer_norm
     in
     Tensor.(xs + ys)
+
+let layer vs config =
+  let { Config.hidden_size; hidden_act; intermediate_size; _ } = config in
+  let attention = self_attention Var_store.(vs / "attention") config in
+  let full_layer_norm =
+    Layer.layer_norm Var_store.(vs / "full_layer_norm") hidden_size ~eps:1e-12
+  in
+  let ffn =
+    Layer.linear Var_store.(vs / "ffn") ~input_dim:hidden_size intermediate_size
+  in
+  let ffn_output =
+    Layer.linear Var_store.(vs / "ffn_output") ~input_dim:intermediate_size hidden_size
+  in
+  let activation =
+    match hidden_act with
+    | `gelu_new -> Activation.gelu_new
+    | `gelu -> Activation.gelu
+    | `relu -> Activation.relu
+    | `mish -> Activation.mish
+  in
+  fun xs ~mask ~is_training ->
+    let xs = attention xs ~mask ~is_training in
+    let ys = Layer.forward ffn xs |> activation |> Layer.forward ffn_output in
+    Tensor.(xs + ys) |> Layer.forward full_layer_norm
+
+let layer_group vs (config : Config.t) =
+  let vs = Var_store.(vs / "albert_layers") in
+  let layers =
+    List.init config.inner_group_num ~f:(fun i ->
+        layer Var_store.(vs / Int.to_string i) config)
+  in
+  fun xs ~mask ~is_training ->
+    List.fold layers ~init:xs ~f:(fun acc layer -> layer acc ~mask ~is_training)
+
+let transformer vs (config : Config.t) =
+  let vs = Var_store.(vs / "albert_layer_groups") in
+  let embedding_hidden_mapping_in =
+    Layer.linear
+      Var_store.(vs / "embedding_hidden_mapping_in")
+      ~input_dim:config.embedding_size
+      config.hidden_size
+  in
+  let layers =
+    List.init config.inner_group_num ~f:(fun i ->
+        layer_group Var_store.(vs / Int.to_string i) config)
+    |> Array.of_list
+  in
+  fun xs ~mask ~is_training ->
+    let xs = Layer.forward embedding_hidden_mapping_in xs in
+    List.init config.num_hidden_layers ~f:Fn.id
+    |> List.fold ~init:xs ~f:(fun xs i ->
+           let group_idx = i / (config.num_hidden_layers / config.num_hidden_groups) in
+           layers.(group_idx) xs ~mask ~is_training)
+
+let model vs (config : Config.t) =
+  let embeddings = embeddings Var_store.(vs / "embeddings") config in
+  let encoder = transformer Var_store.(vs / "encoder") config in
+  let pooler =
+    Layer.linear
+      Var_store.(vs / "pooler")
+      ~input_dim:config.hidden_size
+      config.hidden_size
+  in
+  fun input_ids ~mask ~token_type_ids ~position_ids ~is_training ->
+    let mask =
+      match mask with
+      | Some mask -> mask
+      | None -> Tensor.ones_like input_ids
+    in
+    let mask = Tensor.unsqueeze mask ~dim:1 |> Tensor.unsqueeze ~dim:2 in
+    let mask = Tensor.((f 1.0 - mask) * f (-10000.)) in
+    let hidden_state =
+      embeddings input_ids ~token_type_ids ~position_ids ~is_training
+      |> encoder ~mask:(Some mask) ~is_training
+    in
+    let pooled_output =
+      Tensor.select hidden_state ~dim:1 ~index:0 |> Layer.forward pooler |> Tensor.tanh
+    in
+    hidden_state, pooled_output

@@ -3,15 +3,6 @@ open Base
 open Torch
 module Config = Gpt2_config
 
-let gelu =
-  let sqrt_two_over_pi = 2. /. Float.pi |> Float.sqrt in
-  fun xs ->
-    let ys =
-      Tensor.(
-        tanh (((pow xs ~exponent:(Scalar.f 3.) * f 0.044715) + xs) * f sqrt_two_over_pi))
-    in
-    Tensor.(xs * f 0.5 * (ys + f 1.))
-
 let conv1d vs ~nf ~nx =
   let weight =
     Var_store.new_var
@@ -112,7 +103,7 @@ let mlp vs config =
     match afn with
     | `swish -> Activation.swish
     | `relu -> Activation.relu
-    | `gelu -> gelu
+    | `gelu -> Activation.gelu_new
   in
   Layer.of_fn_ (fun xs ~is_training ->
       Layer.forward c_fc xs
