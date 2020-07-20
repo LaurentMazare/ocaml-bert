@@ -54,7 +54,20 @@ let self_attention vs (config : Config.t) =
   let query = linear "query" in
   let key = linear "key" in
   let value = linear "value" in
-  let _dense = linear "dense" in
+  let w =
+    Var_store.new_var
+      Var_store.(vs / "dense")
+      ~shape:[ hidden_size; hidden_size ]
+      ~init:Zeros
+      ~name:"weight"
+  in
+  let bs =
+    Var_store.new_var
+      Var_store.(vs / "dense")
+      ~shape:[ hidden_size ]
+      ~init:Zeros
+      ~name:"bias"
+  in
   let layer_norm =
     Layer.layer_norm Var_store.(vs / "LayerNorm") config.hidden_size ~eps:1e-12
   in
@@ -85,10 +98,7 @@ let self_attention vs (config : Config.t) =
     let context =
       Tensor.matmul weights value |> Tensor.transpose ~dim0:1 ~dim1:2 |> Tensor.contiguous
     in
-    let context =
-      ignore context;
-      failwith "TODO: implement einsum"
-    in
+    let context = Tensor.(einsum ~equation:"bfnd,ndh->bfh" [ context; w ] + bs) in
     let ys =
       Tensor.dropout context ~p:config.hidden_dropout_p ~is_training
       |> Layer.forward layer_norm
