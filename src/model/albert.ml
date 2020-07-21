@@ -1,4 +1,13 @@
+(** ALBERT: A Lite BERT
+    http://ai.googleblog.com/2019/12/albert-lite-bert-for-self-supervised.html
+    https://arxiv.org/abs/1909.11942
+
+    Weights published under the Apache 2.0 license by Google and hosted by
+    Huggingsface:
+        https://cdn.huggingface.co/albert-base-v2/rust_model.ot
+*)
 open Base
+
 open Torch
 module Config = Albert_config
 
@@ -183,3 +192,35 @@ let model vs (config : Config.t) =
       Tensor.select hidden_state ~dim:1 ~index:0 |> Layer.forward pooler |> Tensor.tanh
     in
     hidden_state, pooled_output
+
+let masked_lm_head vs config =
+  let { Config.embedding_size; hidden_size; vocab_size; hidden_act; _ } = config in
+  let layer_norm =
+    Layer.layer_norm Var_store.(vs / "LayerNorm") embedding_size ~eps:1e-12
+  in
+  let dense =
+    Layer.linear Var_store.(vs / "dense") ~input_dim:hidden_size embedding_size
+  in
+  let decoder =
+    Layer.linear Var_store.(vs / "decoder") ~input_dim:embedding_size vocab_size
+  in
+  let activation =
+    match hidden_act with
+    | `gelu_new -> Activation.gelu_new
+    | `gelu -> Activation.gelu
+    | `relu -> Activation.relu
+    | `mish -> Activation.mish
+  in
+  Layer.of_fn (fun xs ->
+      Layer.forward dense xs
+      |> activation
+      |> Layer.forward layer_norm
+      |> Layer.forward decoder)
+
+let masked_lm vs config =
+  let model = model Var_store.(vs / "albert") config in
+  let predictions = masked_lm_head Var_store.(vs / "predictions") config in
+  fun input_ids ~mask ~token_type_ids ~position_ids ~is_training ->
+    model input_ids ~mask ~token_type_ids ~position_ids ~is_training
+    |> fst
+    |> Layer.forward predictions
